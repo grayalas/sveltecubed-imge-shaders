@@ -9,64 +9,93 @@
 	import testFragmentShader from '$lib/shaders/fragment.glsl';
 	import texture from '$lib/textures/perfume02.jpg';
 	import { onMount } from 'svelte';
+	import { dragMe } from '$lib/helpers/dragMe.js';
 
-	// -- SIZES -- //
-	$: innerWidth = 0;
-	$: innerHeight = 0;
-
-	// -- TEXTURE -- //
-	const textureLoader = new THREE.TextureLoader();
 	let canvas;
 	let camera;
 	let watchTexture;
-	let obj;
-	onMount(async () => {
-		camera = await canvas.$$.ctx[0].camera.object;
-		obj = await canvas.$$.ctx[0].scene.children[0];
-		watchTexture = await textureLoader.load(texture);
-	});
+	let image;
 
-	// -- GEOMETRY -- //
-	const geometry = new THREE.PlaneGeometry(0.4, 0.6, 16, 16);
+	/////////////////
+	// -- SIZES -- //
+	/////////////////
+	$: innerWidth = 0;
+	$: innerHeight = 0;
 
-	// -- MATERIAL -- //
-	const material = new THREE.ShaderMaterial({
-		uniforms: {
-			uTime: { value: 0 },
-			uColor: { value: new THREE.Color(1.0, 0.0, 0.0) },
-			uTexture: { value: watchTexture }
-		},
-		vertexShader: testVertexShader,
-		fragmentShader: testFragmentShader
-	});
-
+	/////////////////////
+	// -- RAYCASTER -- //
+	/////////////////////
 	const raycaster = new THREE.Raycaster();
 	let currentIntersect = null;
-	const rayOrigin = new THREE.Vector3(-3, 0, 0);
-	const rayDirection = new THREE.Vector3(10, 0, 0);
-	rayDirection.normalize();
 
-	const mouse = new THREE.Vector2();
+	/////////////////
+	// -- MOUSE -- //
+	/////////////////
+	const mouse = new THREE.Vector2(-1, -1);
 	function handleMousemove(event) {
 		mouse.x = (event.clientX / innerWidth) * 2 - 1;
 		mouse.y = -(event.clientY / innerHeight) * 2 + 1;
 	}
 
+	///////////////////
+	// -- TEXTURE -- //
+	///////////////////
+	const textureLoader = new THREE.TextureLoader();
+	// Load the texture when the document is ready
+	onMount(async () => {
+		watchTexture = await textureLoader.load(texture);
+	});
+
+	////////////////////
+	// -- GEOMETRY -- //
+	////////////////////
+	const geometry = new THREE.PlaneGeometry(0.4, 0.6, 16, 16);
+
+	////////////////////
+	// -- MATERIAL -- //
+	////////////////////
+	const material = new THREE.ShaderMaterial({
+		uniforms: {
+			uTime: { value: 0 },
+			uColor: { value: new THREE.Color(1.0, 0.0, 0.0) },
+			uTexture: { value: watchTexture },
+			uAnimate: { value: 0.1 }
+		},
+		vertexShader: testVertexShader,
+		fragmentShader: testFragmentShader
+	});
+
+	/////////////////////
 	// -- ANIMATION -- //
+	/////////////////////
 	const clock = new THREE.Clock();
+	let previousTime = 0;
 	SC.onFrame(() => {
 		const elapsedTime = clock.getElapsedTime();
-		material.uniforms.uTime.value = elapsedTime;
-		material.uniforms.uTexture.value = watchTexture;
-		camera = canvas.$$.ctx[0].camera.object;
-		obj = canvas.$$.ctx[0].scene.children[0];
+		const deltaTime = elapsedTime - previousTime;
+		previousTime = elapsedTime;
 
-		// console.log(camera);
+		// Set the clock on the time uniform to animate it in shaders
+		material.uniforms.uTime.value = elapsedTime;
+
+		// Set the image in the shader as a texture
+		material.uniforms.uTexture.value = watchTexture;
+
+		// Get the camera and image object3D from svelte canvas: `bind:this={canvas}`
+		camera = canvas.$$.ctx[0].camera.object;
+		image = canvas.$$.ctx[0].scene.children[0];
 
 		// Cast a ray from the mouse and handle events
 		raycaster.setFromCamera(mouse, camera);
 
-		const objectsToTest = [obj];
+		// When the cursor gets close to the middle; slow the wave down
+		let lerpAnimation = 0;
+		let animationTarget = mouse.x;
+		lerpAnimation += (animationTarget - lerpAnimation) * 5 * deltaTime;
+		material.uniforms.uAnimate.value = lerpAnimation;
+
+		// Mouse enter and leave events when hovering image
+		const objectsToTest = [image];
 		const intersects = raycaster.intersectObjects(objectsToTest);
 
 		if (intersects.length) {
@@ -86,7 +115,8 @@
 </script>
 
 <svelte:window bind:innerWidth bind:innerHeight on:mousemove={handleMousemove} />
-<p>The mouse position is {mouse.x} x {mouse.y}</p>
+<svelte:body style="cursor: pointer" />
+<p use:dragMe>The mouse position is {mouse.x} x {mouse.y}</p>
 <section>
 	<SC.Canvas bind:this={canvas} antialias background={new THREE.Color('black')}>
 		<SC.Mesh {geometry} {material} />
@@ -95,20 +125,11 @@
 		<SC.DirectionalLight intensity={0.6} position={[-2, 3, 2]} />
 	</SC.Canvas>
 </section>
-<h1>il profumo di una scoreggia</h1>
 
 <style>
 	p {
-		color: papayawhip;
+		color: red;
 		position: relative;
 		z-index: 1;
-	}
-
-	h1 {
-		color: papayawhip;
-		font-size: clamp(100%, 1rem + 8vw, 4rem);
-		position: relative;
-		z-index: 1;
-		margin: 6rem 2rem;
 	}
 </style>
